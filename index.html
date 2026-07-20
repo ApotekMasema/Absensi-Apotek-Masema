@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Absensi — Apotek Masema Medika</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAF9F5;
+    --surface:#FFFFFF;
+    --ink:#1C2A26;
+    --ink-soft:#5B6B66;
+    --ink-faint:#93A19C;
+    --primary:#146356;
+    --primary-dark:#0E4A41;
+    --primary-soft:#E4F1EC;
+    --accent:#C2760C;
+    --accent-soft:#FBEEDC;
+    --danger:#B3261E;
+    --danger-soft:#FBEAE9;
+    --border:#E4E1D8;
+    --radius:14px;
+    --font-display:'Manrope',sans-serif;
+    --font-body:'Inter',sans-serif;
+    --font-mono:'JetBrains Mono',monospace;
+    --shadow:0 1px 2px rgba(28,42,38,.04), 0 8px 24px -12px rgba(28,42,38,.18);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  button{font-family:inherit;cursor:pointer;}
+  input,select{font-family:inherit;}
+
+  /* ---------- Topbar ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;background:var(--surface);
+    border-bottom:1px solid var(--border);
+    position:sticky;top:0;z-index:20;
+    flex-wrap:wrap;gap:12px;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:800;font-size:17px;color:var(--primary-dark);}
+  .brand-mark{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:32px;height:32px;border-radius:9px;background:var(--primary);color:#fff;
+    font-size:17px;font-weight:800;flex:none;
+  }
+  .brand small{display:block;font-family:var(--font-body);font-weight:500;font-size:11.5px;color:var(--ink-soft);}
+  .tabs{display:flex;gap:6px;background:var(--bg);padding:4px;border-radius:11px;border:1px solid var(--border);}
+  .tab{
+    border:none;background:transparent;padding:9px 16px;border-radius:8px;
+    font-weight:700;font-size:13.5px;color:var(--ink-soft);transition:.15s;
+  }
+  .tab.active{background:var(--primary);color:#fff;}
+  .tab:not(.active):hover{color:var(--ink);background:var(--surface);}
+
+  main{max-width:1040px;margin:0 auto;padding:26px 20px 80px;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  /* ---------- Clock hero ---------- */
+  .clock-panel{
+    background:linear-gradient(160deg,var(--primary-dark),var(--primary));
+    border-radius:20px;padding:26px 28px;color:#fff;
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;
+    margin-bottom:26px;box-shadow:var(--shadow);
+  }
+  .clock-date{font-size:13.5px;font-weight:600;opacity:.85;letter-spacing:.02em;}
+  .clock-time{
+    font-family:var(--font-mono);font-size:44px;font-weight:700;letter-spacing:.02em;
+    font-variant-numeric:tabular-nums;
+  }
+  .clock-sub{font-size:12.5px;opacity:.75;margin-top:4px;}
+  .clock-badge{
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);
+    border-radius:10px;padding:10px 14px;font-size:12.5px;line-height:1.5;text-align:right;
+  }
+  .clock-badge b{display:block;font-family:var(--font-display);font-size:20px;}
+
+  h2{font-family:var(--font-display);font-size:16px;margin:0 0 4px;color:var(--primary-dark);}
+  .section-hint{color:var(--ink-soft);font-size:13px;margin:0 0 16px;}
+
+  /* ---------- Employee grid ---------- */
+  .employee-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;
+  }
+  .emp-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px;
+  }
+  .emp-name{font-family:var(--font-display);font-weight:800;font-size:15.5px;}
+  .emp-role{font-size:12px;color:var(--ink-soft);margin-top:-6px;}
+  .emp-status{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:99px;width:fit-content;}
+  .st-belum{background:var(--bg);color:var(--ink-faint);border:1px solid var(--border);}
+  .st-masuk{background:var(--accent-soft);color:var(--accent);}
+  .st-selesai{background:var(--primary-soft);color:var(--primary-dark);}
+  .emp-times{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-soft);display:flex;gap:14px;}
+  .emp-times span b{color:var(--ink);}
+  .emp-btn{
+    border:none;border-radius:10px;padding:11px;font-weight:700;font-size:13.5px;color:#fff;
+    background:var(--primary);transition:.15s;
+  }
+  .emp-btn:hover{background:var(--primary-dark);}
+  .emp-btn.pulang{background:var(--accent);}
+  .emp-btn.pulang:hover{background:#a2620a;}
+  .emp-btn:disabled{background:var(--bg);color:var(--ink-faint);border:1px solid var(--border);cursor:default;}
+  .empty-state{
+    border:1px dashed var(--border);border-radius:var(--radius);padding:34px;text-align:center;color:var(--ink-soft);
+  }
+
+  /* ---------- Rekap ---------- */
+  .rekap-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:11.5px;font-weight:700;color:var(--ink-soft);}
+  input[type=month],input[type=text],input[type=number],input[type=password]{
+    border:1px solid var(--border);border-radius:9px;padding:9px 11px;font-size:13.5px;background:var(--surface);color:var(--ink);
+  }
+  .btn{
+    border:none;border-radius:9px;padding:10px 15px;font-weight:700;font-size:13px;
+    background:var(--surface);border:1px solid var(--border);color:var(--ink);
+  }
+  .btn:hover{border-color:var(--primary);color:var(--primary-dark);}
+  .btn-primary{background:var(--primary);color:#fff;border-color:var(--primary);}
+  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-danger{color:var(--danger);}
+  .btn-danger:hover{border-color:var(--danger);background:var(--danger-soft);}
+
+  .summary-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
+  .s-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+  .s-card .k{font-size:11.5px;color:var(--ink-soft);font-weight:600;}
+  .s-card .v{font-family:var(--font-display);font-size:20px;font-weight:800;color:var(--primary-dark);margin-top:2px;}
+
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  thead th{
+    background:var(--primary-soft);color:var(--primary-dark);text-align:left;
+    font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;
+  }
+  tbody td{padding:12px 14px;font-size:13.5px;border-top:1px solid var(--border);}
+  tbody tr:hover{background:var(--bg);}
+  td.num,th.num{text-align:right;font-family:var(--font-mono);}
+  .row-detail-btn{border:none;background:transparent;color:var(--primary);font-weight:700;font-size:12px;padding:0;}
+  tfoot td{padding:12px 14px;font-weight:800;border-top:2px solid var(--border);font-family:var(--font-mono);}
+
+  /* ---------- Pengaturan ---------- */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:18px;box-shadow:var(--shadow);}
+  .emp-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap;}
+  .emp-row:first-child{border-top:none;}
+  .emp-row .nm{flex:1 1 160px;font-weight:700;}
+  .emp-row input{width:120px;}
+  form.inline{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-top:14px;}
+
+  /* ---------- Modal / toast ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(20,30,27,.45);display:flex;align-items:center;justify-content:center;
+    z-index:50;padding:20px;
+  }
+  .modal-overlay.hidden{display:none;}
+  .modal{background:var(--surface);border-radius:16px;padding:24px;width:100%;max-width:320px;box-shadow:var(--shadow);text-align:center;}
+  .modal h3{font-family:var(--font-display);margin:0 0 6px;}
+  .modal p{font-size:13px;color:var(--ink-soft);margin:0 0 16px;}
+  .modal input{width:100%;text-align:center;letter-spacing:.3em;font-size:18px;padding:12px;margin-bottom:12px;}
+  .modal .btn-primary{width:100%;padding:11px;}
+  .modal .cancel{margin-top:10px;background:transparent;border:none;color:var(--ink-soft);font-size:12.5px;text-decoration:underline;}
+
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;padding:12px 20px;border-radius:99px;font-size:13.5px;font-weight:600;
+    box-shadow:var(--shadow);z-index:60;opacity:0;transition:.25s;pointer-events:none;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.err{background:var(--danger);}
+
+  .muted{color:var(--ink-soft);font-size:12.5px;}
+
+  @media print{
+    .topbar,.rekap-controls,.tab:not(.active){display:none !important;}
+    body{background:#fff;}
+    main{padding:0;max-width:100%;}
+    .card,.emp-card{box-shadow:none;}
+  }
+  @media (max-width:520px){
+    .clock-time{font-size:34px;}
+    .topbar{padding:12px 14px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">✚</span>
+    <div>
+      Apotek Masema Medika
+      <small>Sistem Absensi & Gaji Karyawan</small>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="absen">Absen</button>
+    <button class="tab" data-tab="rekap">Rekap &amp; Gaji</button>
+    <button class="tab" data-tab="pengaturan">Pengaturan</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ===== TAB ABSEN ===== -->
+  <section class="tab-panel active" id="tab-absen">
+    <div class="clock-panel">
+      <div>
+        <div class="clock-date" id="clockDate">—</div>
+        <div class="clock-time" id="clockTime">00:00:00</div>
+        <div class="clock-sub">Klik nama Anda satu kali untuk absen masuk / pulang</div>
+      </div>
+      <div class="clock-badge" id="todayBadge">
+        <b id="todayCount">0</b>
+        karyawan sudah absen hari ini
+      </div>
+    </div>
+
+    <div id="employeeGrid" class="employee-grid">
+      <div class="empty-state">Memuat data karyawan…</div>
+    </div>
+  </section>
+
+  <!-- ===== TAB REKAP ===== -->
+  <section class="tab-panel" id="tab-rekap">
+    <h2>Rekap Absensi & Gaji</h2>
+    <p class="section-hint">Dihitung otomatis dari data absen. Ubah bulan untuk melihat periode lain.</p>
+
+    <div class="rekap-controls">
+      <div class="field">
+        <label for="monthPicker">Periode</label>
+        <input type="month" id="monthPicker">
+      </div>
+      <button class="btn" id="btnPrint" style="align-self:flex-end;">🖨️ Cetak</button>
+      <button class="btn" id="btnCsv" style="align-self:flex-end;">⬇️ Unduh CSV</button>
+    </div>
+
+    <div class="summary-cards" id="summaryCards"></div>
+
+    <table id="rekapTable">
+      <thead>
+        <tr>
+          <th>Nama</th>
+          <th>Jabatan</th>
+          <th class="num">Hari Hadir</th>
+          <th class="num">Jam Kerja</th>
+          <th class="num">Gaji / Hari</th>
+          <th class="num">Total Gaji</th>
+        </tr>
+      </thead>
+      <tbody id="rekapBody"></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5">Total Gaji Dibayarkan</td>
+          <td class="num" id="rekapGrandTotal">Rp 0</td>
+        </tr>
+      </tfoot>
+    </table>
+  </section>
+
+  <!-- ===== TAB PENGATURAN ===== -->
+  <section class="tab-panel" id="tab-pengaturan">
+    <h2>Kelola Karyawan</h2>
+    <p class="section-hint">Atur nama, jabatan, dan gaji harian tiap karyawan.</p>
+
+    <div class="card">
+      <div id="employeeSettingsList"></div>
+      <form class="inline" id="addEmployeeForm">
+        <div class="field">
+          <label>Nama</label>
+          <input type="text" id="newEmpName" placeholder="Nama karyawan" required>
+        </div>
+        <div class="field">
+          <label>Jabatan</label>
+          <input type="text" id="newEmpRole" placeholder="Apoteker / Kasir / dll">
+        </div>
+        <div class="field">
+          <label>Gaji / hari (Rp)</label>
+          <input type="number" id="newEmpWage" placeholder="100000" min="0" required>
+        </div>
+        <button type="submit" class="btn btn-primary">+ Tambah Karyawan</button>
+      </form>
+    </div>
+
+    <h2>Ubah PIN Admin</h2>
+    <p class="section-hint">PIN ini diminta setiap kali membuka tab Rekap &amp; Gaji atau Pengaturan.</p>
+    <div class="card">
+      <form class="inline" id="pinForm">
+        <div class="field">
+          <label>PIN baru (4 digit)</label>
+          <input type="password" id="newPin" maxlength="4" inputmode="numeric" placeholder="••••" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Simpan PIN</button>
+      </form>
+      <p class="muted" style="margin-top:10px;">PIN default saat pertama kali dipakai adalah <b>1234</b>.</p>
+    </div>
+  </section>
+
+</main>
+
+<div class="modal-overlay hidden" id="pinModal">
+  <div class="modal">
+    <h3>Masukkan PIN Admin</h3>
+    <p>Diperlukan untuk mengakses halaman ini.</p>
+    <input type="password" id="pinInput" maxlength="4" inputmode="numeric" placeholder="••••">
+    <button class="btn btn-primary" id="pinSubmit">Buka</button>
+    <br>
+    <button class="cancel" id="pinCancel">Batal</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay hidden" id="setupWarning">
+  <div class="modal" style="max-width:420px;text-align:left;">
+    <h3 style="text-align:center;">⚠️ Belum Terhubung ke Database</h3>
+    <p style="text-align:center;">Aplikasi ini butuh <b>Firebase Database URL</b> supaya data absen bisa tersimpan &amp; sinkron di semua HP.</p>
+    <p style="font-size:12.5px;line-height:1.6;">
+      Caranya:<br>
+      1. Buka file <code>index.html</code> ini dengan editor teks (Notepad / GitHub).<br>
+      2. Cari baris <code>const FIREBASE_DB_URL = "TEMPEL_DATABASE_URL_FIREBASE_DI_SINI";</code><br>
+      3. Ganti bagian dalam tanda kutip dengan Database URL dari Firebase Anda.<br>
+      4. Simpan &amp; upload ulang ke GitHub.
+    </p>
+    <p class="muted" style="text-align:center;">Lihat <b>Tutorial_GitHub_Firebase.md</b> untuk panduan lengkap bergambar.</p>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   ABSENSI APOTEK MASEMA MEDIKA — Versi GitHub Pages + Firebase
+   Data disimpan di Firebase Realtime Database (gratis) lewat
+   REST API biasa (fetch), tanpa perlu install library apa pun.
+   Supaya jalan, WAJIB isi FIREBASE_DB_URL di bawah ini dulu.
+   Lihat Tutorial_GitHub_Firebase.md untuk cara mendapatkannya.
+   ========================================================= */
+
+// >>> GANTI BARIS DI BAWAH INI dengan Database URL Firebase Anda <<<
+const FIREBASE_DB_URL = "https://absensi-apotek-masema-default-rtdb.asia-southeast1.firebasedatabase.app";
+// Contoh: "https://absensi-apotek-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+const DB_URL = FIREBASE_DB_URL.replace(/\/$/, '');
+const DB_CONFIGURED = DB_URL && !DB_URL.includes('TEMPEL_');
+
+const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+let employees = [];        // [{id, nama, jabatan, gajiHarian}]
+let adminPin = '1234';
+let pinUnlocked = false;
+let pendingTabAfterPin = null;
+let todayAttendance = {};  // { empId: {masuk, pulang} }
+
+/* ---------------- storage helpers (Firebase REST) ---------------- */
+async function sGet(path){
+  try{
+    const res = await fetch(`${DB_URL}/${path}.json`, { cache:'no-store' });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data; // sudah berupa object/array/string asli, bukan string JSON
+  }catch(e){ console.error('Gagal mengambil', path, e); return null; }
+}
+async function sSet(path, valueObj){
+  try{
+    const res = await fetch(`${DB_URL}/${path}.json`, {
+      method:'PUT',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(valueObj),
+    });
+    return res.ok;
+  }catch(e){ console.error('Gagal menyimpan', path, e); return false; }
+}
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function dateKey(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function timeStr(d){ return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function rupiah(n){ return 'Rp ' + Math.round(n||0).toLocaleString('id-ID'); }
+
+function toast(msg, isErr){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.toggle('err', !!isErr);
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>el.classList.remove('show'), 2600);
+}
+
+/* ---------------- init / seed data ---------------- */
+async function initData(){
+  const empRaw = await sGet('karyawan-list');
+  if(empRaw){
+    employees = empRaw;
+  } else {
+    employees = [
+      { id: crypto.randomUUID(), nama:'Siti Aminah', jabatan:'Apoteker', gajiHarian:120000 },
+      { id: crypto.randomUUID(), nama:'Budi Santoso', jabatan:'Asisten Apoteker', gajiHarian:100000 },
+      { id: crypto.randomUUID(), nama:'Dewi Lestari', jabatan:'Kasir', gajiHarian:90000 },
+    ];
+    await sSet('karyawan-list', employees);
+  }
+
+  const pinRaw = await sGet('admin-pin');
+  if(pinRaw){
+    adminPin = pinRaw;
+  } else {
+    adminPin = '1234';
+    await sSet('admin-pin', adminPin);
+  }
+}
+
+async function saveEmployees(){
+  await sSet('karyawan-list', employees);
+}
+
+/* ---------------- clock ---------------- */
+function tickClock(){
+  const now = new Date();
+  document.getElementById('clockTime').textContent = timeStr(now);
+  document.getElementById('clockDate').textContent = `${HARI[now.getDay()]}, ${now.getDate()} ${BULAN[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+/* ---------------- tab absen ---------------- */
+async function loadTodayAttendance(){
+  const raw = await sGet('absensi/' + dateKey(new Date()));
+  todayAttendance = raw || {};
+}
+
+function renderEmployeeGrid(){
+  const grid = document.getElementById('employeeGrid');
+  if(employees.length === 0){
+    grid.innerHTML = '<div class="empty-state">Belum ada karyawan. Tambahkan lewat tab Pengaturan.</div>';
+    document.getElementById('todayCount').textContent = '0';
+    return;
+  }
+
+  let sudahAbsen = 0;
+  grid.innerHTML = employees.map(emp=>{
+    const rec = todayAttendance[emp.id];
+    const masuk = rec && rec.masuk;
+    const pulang = rec && rec.pulang;
+    if(masuk) sudahAbsen++;
+
+    let statusHtml, btnHtml;
+    if(!masuk){
+      statusHtml = `<span class="emp-status st-belum">Belum absen</span>`;
+      btnHtml = `<button class="emp-btn" data-action="masuk" data-id="${emp.id}">Absen Masuk</button>`;
+    } else if(masuk && !pulang){
+      statusHtml = `<span class="emp-status st-masuk">Sudah masuk</span>`;
+      btnHtml = `<button class="emp-btn pulang" data-action="pulang" data-id="${emp.id}">Absen Pulang</button>`;
+    } else {
+      statusHtml = `<span class="emp-status st-selesai">✓ Absen lengkap</span>`;
+      btnHtml = `<button class="emp-btn" disabled>Selesai hari ini</button>`;
+    }
+
+    return `
+      <div class="emp-card">
+        <div>
+          <div class="emp-name">${escapeHtml(emp.nama)}</div>
+          ${emp.jabatan ? `<div class="emp-role">${escapeHtml(emp.jabatan)}</div>` : ''}
+        </div>
+        ${statusHtml}
+        <div class="emp-times">
+          <span>Masuk: <b>${masuk ? masuk.slice(0,5) : '-'}</b></span>
+          <span>Pulang: <b>${pulang ? pulang.slice(0,5) : '-'}</b></span>
+        </div>
+        ${btnHtml}
+      </div>`;
+  }).join('');
+
+  document.getElementById('todayCount').textContent = sudahAbsen;
+
+  grid.querySelectorAll('.emp-btn[data-action]').forEach(btn=>{
+    btn.addEventListener('click', onAbsenClick);
+  });
+}
+
+async function onAbsenClick(e){
+  const btn = e.currentTarget;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+  btn.disabled = true;
+
+  // Muat ulang data terbaru dulu (jaga-jaga ada perubahan dari perangkat lain)
+  await loadTodayAttendance();
+  const now = new Date();
+  const rec = todayAttendance[id] || {};
+
+  if(action === 'masuk'){
+    if(rec.masuk){ toast('Sudah absen masuk sebelumnya.'); renderEmployeeGrid(); return; }
+    rec.masuk = timeStr(now);
+  } else {
+    if(!rec.masuk){ toast('Belum absen masuk.'); renderEmployeeGrid(); return; }
+    if(rec.pulang){ toast('Sudah absen pulang sebelumnya.'); renderEmployeeGrid(); return; }
+    rec.pulang = timeStr(now);
+  }
+  todayAttendance[id] = rec;
+
+  const ok = await sSet('absensi/' + dateKey(now), todayAttendance);
+  const emp = employees.find(x=>x.id===id);
+  if(ok){
+    toast(`${emp ? emp.nama : 'Absen'} — ${action === 'masuk' ? 'absen masuk' : 'absen pulang'} pukul ${timeStr(now).slice(0,5)} ✓`);
+  } else {
+    toast('Gagal menyimpan absen, coba lagi.', true);
+  }
+  renderEmployeeGrid();
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------------- tab rekap ---------------- */
+function daysInMonth(year, monthIndex){ return new Date(year, monthIndex+1, 0).getDate(); }
+
+async function buildRekap(yyyyMm){
+  const [y,m] = yyyyMm.split('-').map(Number);
+  const monthIndex = m-1;
+  const nDays = daysInMonth(y, monthIndex);
+
+  const agg = {}; // id -> {hariHadir, totalMenit}
+  employees.forEach(e=> agg[e.id] = { hariHadir:0, totalMenit:0 });
+
+  for(let d=1; d<=nDays; d++){
+    const ds = `${y}-${pad(m)}-${pad(d)}`;
+    const raw = await sGet('absensi/' + ds);
+    if(!raw) continue;
+    const obj = raw;
+    Object.keys(obj).forEach(empId=>{
+      if(!agg[empId]) agg[empId] = { hariHadir:0, totalMenit:0 };
+      const rec = obj[empId];
+      if(rec.masuk){
+        agg[empId].hariHadir += 1;
+        if(rec.pulang){
+          const t1 = new Date(`${ds}T${rec.masuk}`);
+          const t2 = new Date(`${ds}T${rec.pulang}`);
+          const diff = (t2 - t1) / 60000;
+          if(diff > 0) agg[empId].totalMenit += diff;
+        }
+      }
+    });
+  }
+  return agg;
+}
+
+async function renderRekap(){
+  const monthVal = document.getElementById('monthPicker').value;
+  if(!monthVal) return;
+
+  document.getElementById('rekapBody').innerHTML = `<tr><td colspan="6" class="muted">Menghitung rekap…</td></tr>`;
+  const agg = await buildRekap(monthVal);
+
+  let totalGaji = 0, totalHari = 0, totalJam = 0;
+  const rows = employees.map(emp=>{
+    const a = agg[emp.id] || { hariHadir:0, totalMenit:0 };
+    const jam = a.totalMenit/60;
+    const gaji = a.hariHadir * (emp.gajiHarian||0);
+    totalGaji += gaji; totalHari += a.hariHadir; totalJam += jam;
+    return { emp, hariHadir:a.hariHadir, jam, gaji };
+  });
+
+  document.getElementById('rekapBody').innerHTML = rows.length ? rows.map(r=>`
+    <tr>
+      <td>${escapeHtml(r.emp.nama)}</td>
+      <td>${escapeHtml(r.emp.jabatan||'-')}</td>
+      <td class="num">${r.hariHadir} hari</td>
+      <td class="num">${r.jam.toFixed(1)} jam</td>
+      <td class="num">${rupiah(r.emp.gajiHarian)}</td>
+      <td class="num">${rupiah(r.gaji)}</td>
+    </tr>`).join('') : `<tr><td colspan="6" class="muted">Belum ada karyawan.</td></tr>`;
+
+  document.getElementById('rekapGrandTotal').textContent = rupiah(totalGaji);
+
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="s-card"><div class="k">Total Hari Hadir</div><div class="v">${totalHari}</div></div>
+    <div class="s-card"><div class="k">Total Jam Kerja</div><div class="v">${totalJam.toFixed(1)}</div></div>
+    <div class="s-card"><div class="k">Total Gaji Dibayarkan</div><div class="v">${rupiah(totalGaji)}</div></div>
+  `;
+
+  renderRekap._rows = rows;
+  renderRekap._month = monthVal;
+}
+
+function exportCsv(){
+  const rows = renderRekap._rows || [];
+  if(!rows.length){ toast('Tidak ada data untuk diunduh.', true); return; }
+  let csv = 'Nama,Jabatan,Hari Hadir,Jam Kerja,Gaji per Hari,Total Gaji\n';
+  rows.forEach(r=>{
+    csv += `"${r.emp.nama}","${r.emp.jabatan||''}",${r.hariHadir},${r.jam.toFixed(2)},${r.emp.gajiHarian},${Math.round(r.gaji)}\n`;
+  });
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Rekap-Gaji-${renderRekap._month}.csv`;
+  a.click();
+}
+
+/* ---------------- tab pengaturan ---------------- */
+function renderEmployeeSettings(){
+  const wrap = document.getElementById('employeeSettingsList');
+  if(employees.length === 0){
+    wrap.innerHTML = '<p class="muted">Belum ada karyawan.</p>';
+    return;
+  }
+  wrap.innerHTML = employees.map(emp=>`
+    <div class="emp-row" data-id="${emp.id}">
+      <div class="nm">${escapeHtml(emp.nama)}</div>
+      <input type="text" class="edit-role" value="${escapeHtml(emp.jabatan||'')}" placeholder="Jabatan">
+      <input type="number" class="edit-wage" value="${emp.gajiHarian}" min="0">
+      <button class="btn save-emp">Simpan</button>
+      <button class="btn btn-danger del-emp">Hapus</button>
+    </div>
+  `).join('');
+
+  wrap.querySelectorAll('.save-emp').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      const row = e.target.closest('.emp-row');
+      const id = row.dataset.id;
+      const emp = employees.find(x=>x.id===id);
+      emp.jabatan = row.querySelector('.edit-role').value.trim();
+      emp.gajiHarian = Number(row.querySelector('.edit-wage').value) || 0;
+      await saveEmployees();
+      toast('Data karyawan disimpan ✓');
+    });
+  });
+  wrap.querySelectorAll('.del-emp').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      const row = e.target.closest('.emp-row');
+      const id = row.dataset.id;
+      const emp = employees.find(x=>x.id===id);
+      if(!confirm(`Hapus karyawan "${emp.nama}"? Riwayat absen lama tidak akan terhapus.`)) return;
+      employees = employees.filter(x=>x.id!==id);
+      await saveEmployees();
+      renderEmployeeSettings();
+      renderEmployeeGrid();
+      toast('Karyawan dihapus.');
+    });
+  });
+}
+
+document.getElementById('addEmployeeForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const nama = document.getElementById('newEmpName').value.trim();
+  const jabatan = document.getElementById('newEmpRole').value.trim();
+  const gaji = Number(document.getElementById('newEmpWage').value) || 0;
+  if(!nama) return;
+  employees.push({ id: crypto.randomUUID(), nama, jabatan, gajiHarian: gaji });
+  await saveEmployees();
+  e.target.reset();
+  renderEmployeeSettings();
+  renderEmployeeGrid();
+  toast(`Karyawan "${nama}" ditambahkan ✓`);
+});
+
+document.getElementById('pinForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const val = document.getElementById('newPin').value.trim();
+  if(!/^\d{4}$/.test(val)){ toast('PIN harus 4 digit angka.', true); return; }
+  adminPin = val;
+  await sSet('admin-pin', adminPin);
+  e.target.reset();
+  toast('PIN admin diperbarui ✓');
+});
+
+/* ---------------- tabs + pin gate ---------------- */
+const PROTECTED_TABS = ['rekap','pengaturan'];
+
+document.querySelectorAll('.tab').forEach(tabBtn=>{
+  tabBtn.addEventListener('click', ()=>{
+    const target = tabBtn.dataset.tab;
+    if(PROTECTED_TABS.includes(target) && !pinUnlocked){
+      pendingTabAfterPin = target;
+      openPinModal();
+      return;
+    }
+    activateTab(target);
+  });
+});
+
+function activateTab(target){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===target));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id==='tab-'+target));
+  if(target === 'rekap'){
+    if(!document.getElementById('monthPicker').value){
+      const now = new Date();
+      document.getElementById('monthPicker').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+    }
+    renderRekap();
+  }
+  if(target === 'pengaturan'){
+    renderEmployeeSettings();
+  }
+  if(target === 'absen'){
+    loadTodayAttendance().then(renderEmployeeGrid);
+  }
+}
+
+function openPinModal(){
+  document.getElementById('pinModal').classList.remove('hidden');
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinInput').focus();
+}
+function closePinModal(){
+  document.getElementById('pinModal').classList.add('hidden');
+}
+document.getElementById('pinCancel').addEventListener('click', closePinModal);
+document.getElementById('pinSubmit').addEventListener('click', checkPin);
+document.getElementById('pinInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') checkPin(); });
+
+function checkPin(){
+  const val = document.getElementById('pinInput').value.trim();
+  if(val === adminPin){
+    pinUnlocked = true;
+    closePinModal();
+    activateTab(pendingTabAfterPin);
+  } else {
+    toast('PIN salah.', true);
+  }
+}
+
+document.getElementById('monthPicker').addEventListener('change', renderRekap);
+document.getElementById('btnCsv').addEventListener('click', exportCsv);
+document.getElementById('btnPrint').addEventListener('click', ()=>window.print());
+
+/* ---------------- boot ---------------- */
+(async function boot(){
+  if(!DB_CONFIGURED){
+    document.getElementById('setupWarning').classList.remove('hidden');
+    return; // hentikan, jangan coba konek ke database yang belum diisi
+  }
+  await initData();
+  renderEmployeeGrid();
+  await loadTodayAttendance();
+  renderEmployeeGrid();
+  tickClock();
+  setInterval(tickClock, 1000);
+  setInterval(()=>{
+    const activePanel = document.querySelector('.tab-panel.active');
+    if(activePanel && activePanel.id === 'tab-absen'){
+      loadTodayAttendance().then(renderEmployeeGrid);
+    }
+  }, 20000);
+})();
+</script>
+</body>
+</html>
