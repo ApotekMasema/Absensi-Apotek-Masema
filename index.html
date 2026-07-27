@@ -119,10 +119,10 @@
   }
 
   /* ---------- Rekap ---------- */
-  .rekap-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+  .rekap-controls{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
   .field{display:flex;flex-direction:column;gap:4px;}
   .field label{font-size:11.5px;font-weight:700;color:var(--ink-soft);}
-  input[type=month],input[type=text],input[type=number],input[type=password]{
+  input[type=month],input[type=date],input[type=text],input[type=number],input[type=password]{
     border:1px solid var(--border);border-radius:9px;padding:9px 11px;font-size:13.5px;background:var(--surface);color:var(--ink);
   }
   .btn{
@@ -235,15 +235,20 @@
   <!-- ===== TAB REKAP ===== -->
   <section class="tab-panel" id="tab-rekap">
     <h2>Rekap Absensi & Gaji</h2>
-    <p class="section-hint">Dihitung otomatis dari data absen. Ubah bulan untuk melihat periode lain.</p>
+    <p class="section-hint">Dihitung otomatis dari data absen. Pilih rentang tanggal bebas untuk keperluan penggajian (mingguan, per-15-hari, bulanan, dsb).</p>
 
     <div class="rekap-controls">
       <div class="field">
-        <label for="monthPicker">Periode</label>
-        <input type="month" id="monthPicker">
+        <label for="startDatePicker">Dari Tanggal</label>
+        <input type="date" id="startDatePicker">
       </div>
-      <button class="btn" id="btnPrint" style="align-self:flex-end;">🖨️ Cetak</button>
-      <button class="btn" id="btnCsv" style="align-self:flex-end;">⬇️ Unduh CSV</button>
+      <div class="field">
+        <label for="endDatePicker">Sampai Tanggal</label>
+        <input type="date" id="endDatePicker">
+      </div>
+      <button class="btn" id="btnThisMonth">Bulan Ini</button>
+      <button class="btn" id="btnPrint">🖨️ Cetak</button>
+      <button class="btn" id="btnCsv">⬇️ Unduh CSV</button>
     </div>
 
     <div class="summary-cards" id="summaryCards"></div>
@@ -384,8 +389,13 @@ async function sSet(path, valueObj){
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function dateKey(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function parseDateInput(s){ return new Date(s + 'T00:00:00'); }
 function timeStr(d){ return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 function rupiah(n){ return 'Rp ' + Math.round(n||0).toLocaleString('id-ID'); }
+function formatTanggalPendek(ds){
+  const d = parseDateInput(ds);
+  return `${d.getDate()} ${BULAN[d.getMonth()].slice(0,3)} ${d.getFullYear()}`;
+}
 
 function toast(msg, isErr){
   const el = document.getElementById('toast');
@@ -521,44 +531,49 @@ function escapeHtml(s){
 }
 
 /* ---------------- tab rekap ---------------- */
-function daysInMonth(year, monthIndex){ return new Date(year, monthIndex+1, 0).getDate(); }
-
-async function buildRekap(yyyyMm){
-  const [y,m] = yyyyMm.split('-').map(Number);
-  const monthIndex = m-1;
-  const nDays = daysInMonth(y, monthIndex);
+async function buildRekap(startStr, endStr){
+  const start = parseDateInput(startStr);
+  const end = parseDateInput(endStr);
 
   const agg = {}; // id -> {hariHadir, totalMenit}
   employees.forEach(e=> agg[e.id] = { hariHadir:0, totalMenit:0 });
 
-  for(let d=1; d<=nDays; d++){
-    const ds = `${y}-${pad(m)}-${pad(d)}`;
+  const cur = new Date(start);
+  while(cur <= end){
+    const ds = dateKey(cur);
     const raw = await sGet('absensi/' + ds);
-    if(!raw) continue;
-    const obj = raw;
-    Object.keys(obj).forEach(empId=>{
-      if(!agg[empId]) agg[empId] = { hariHadir:0, totalMenit:0 };
-      const rec = obj[empId];
-      if(rec.masuk){
-        agg[empId].hariHadir += 1;
-        if(rec.pulang){
-          const t1 = new Date(`${ds}T${rec.masuk}`);
-          const t2 = new Date(`${ds}T${rec.pulang}`);
-          const diff = (t2 - t1) / 60000;
-          if(diff > 0) agg[empId].totalMenit += diff;
+    if(raw){
+      const obj = raw;
+      Object.keys(obj).forEach(empId=>{
+        if(!agg[empId]) agg[empId] = { hariHadir:0, totalMenit:0 };
+        const rec = obj[empId];
+        if(rec.masuk){
+          agg[empId].hariHadir += 1;
+          if(rec.pulang){
+            const t1 = new Date(`${ds}T${rec.masuk}`);
+            const t2 = new Date(`${ds}T${rec.pulang}`);
+            const diff = (t2 - t1) / 60000;
+            if(diff > 0) agg[empId].totalMenit += diff;
+          }
         }
-      }
-    });
+      });
+    }
+    cur.setDate(cur.getDate()+1);
   }
   return agg;
 }
 
 async function renderRekap(){
-  const monthVal = document.getElementById('monthPicker').value;
-  if(!monthVal) return;
+  const startVal = document.getElementById('startDatePicker').value;
+  const endVal = document.getElementById('endDatePicker').value;
+  if(!startVal || !endVal) return;
+  if(startVal > endVal){
+    toast('Tanggal "Dari" tidak boleh lebih besar dari tanggal "Sampai".', true);
+    return;
+  }
 
   document.getElementById('rekapBody').innerHTML = `<tr><td colspan="6" class="muted">Menghitung rekap…</td></tr>`;
-  const agg = await buildRekap(monthVal);
+  const agg = await buildRekap(startVal, endVal);
 
   let totalGaji = 0, totalHari = 0, totalJam = 0;
   const rows = employees.map(emp=>{
@@ -582,13 +597,14 @@ async function renderRekap(){
   document.getElementById('rekapGrandTotal').textContent = rupiah(totalGaji);
 
   document.getElementById('summaryCards').innerHTML = `
+    <div class="s-card"><div class="k">Periode</div><div class="v" style="font-size:14px;">${formatTanggalPendek(startVal)} – ${formatTanggalPendek(endVal)}</div></div>
     <div class="s-card"><div class="k">Total Hari Hadir</div><div class="v">${totalHari}</div></div>
     <div class="s-card"><div class="k">Total Jam Kerja</div><div class="v">${totalJam.toFixed(1)}</div></div>
     <div class="s-card"><div class="k">Total Gaji Dibayarkan</div><div class="v">${rupiah(totalGaji)}</div></div>
   `;
 
   renderRekap._rows = rows;
-  renderRekap._month = monthVal;
+  renderRekap._range = `${startVal}_sd_${endVal}`;
 }
 
 function exportCsv(){
@@ -601,7 +617,7 @@ function exportCsv(){
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `Rekap-Gaji-${renderRekap._month}.csv`;
+  a.download = `Rekap-Gaji-${renderRekap._range || 'periode'}.csv`;
   a.click();
 }
 
@@ -691,9 +707,12 @@ function activateTab(target){
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===target));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id==='tab-'+target));
   if(target === 'rekap'){
-    if(!document.getElementById('monthPicker').value){
+    if(!document.getElementById('startDatePicker').value || !document.getElementById('endDatePicker').value){
       const now = new Date();
-      document.getElementById('monthPicker').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      const last = new Date(now.getFullYear(), now.getMonth()+1, 0);
+      document.getElementById('startDatePicker').value = dateKey(first);
+      document.getElementById('endDatePicker').value = dateKey(last);
     }
     renderRekap();
   }
@@ -728,7 +747,16 @@ function checkPin(){
   }
 }
 
-document.getElementById('monthPicker').addEventListener('change', renderRekap);
+document.getElementById('startDatePicker').addEventListener('change', renderRekap);
+document.getElementById('endDatePicker').addEventListener('change', renderRekap);
+document.getElementById('btnThisMonth').addEventListener('click', ()=>{
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  document.getElementById('startDatePicker').value = dateKey(first);
+  document.getElementById('endDatePicker').value = dateKey(last);
+  renderRekap();
+});
 document.getElementById('btnCsv').addEventListener('click', exportCsv);
 document.getElementById('btnPrint').addEventListener('click', ()=>window.print());
 
