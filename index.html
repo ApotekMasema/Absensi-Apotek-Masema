@@ -343,9 +343,9 @@
 </div>
 
 
-<!-- ========= Firebase App Check (keamanan database) ========= -->
+<!-- ========= Firebase Authentication (keamanan database) ========= -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyCVOVYv8fY6RUfaWBoOENDSE4gjUkaRzhg",
@@ -357,25 +357,37 @@
     appId: "1:790157921111:web:f220b7aff605cd5f854c12"
   };
   firebase.initializeApp(firebaseConfig);
-  const appCheck = firebase.appCheck();
-  appCheck.activate("6LfiAW4tAAAAAGdkvjPTwZM0yBPwGUwaFmYfuyD1", true);
+
+  // Aplikasi otomatis "login diam-diam" (anonymous) ke Firebase saat dibuka.
+  // Ini tidak mengubah PIN admin/kasir yang sudah ada sama sekali — hanya
+  // supaya database menolak permintaan yang tidak lewat aplikasi asli.
+  window.__authReady = new Promise((resolve)=>{
+    firebase.auth().onAuthStateChanged(function(user){
+      if(user){
+        resolve(user);
+      } else {
+        firebase.auth().signInAnonymously().catch(function(e){
+          console.error('Gagal login otomatis ke Firebase', e);
+          resolve(null); // tetap lanjut supaya aplikasi tidak macet selamanya
+        });
+      }
+    });
+  });
 
   // Dipakai oleh sGet/sSet supaya tiap request ke database menyertakan
-  // bukti bahwa permintaan datang dari aplikasi asli ini (App Check).
-  window.__getAppCheckToken = async function(){
-    try{
-      const result = await appCheck.getToken(false);
-      return result.token;
-    }catch(e){
-      console.error('Gagal mengambil App Check token', e);
-      return null;
-    }
+  // token bukti bahwa permintaan datang dari aplikasi yang sudah login.
+  window.__getAuthToken = async function(){
+    const user = firebase.auth().currentUser;
+    if(!user) return null;
+    try{ return await user.getIdToken(); } // otomatis refresh kalau kadaluarsa
+    catch(e){ console.error('Gagal mengambil token otentikasi', e); return null; }
   };
 </script>
 
 <script>
 /* =========================================================
    ABSENSI APOTEK MASEMA MEDIKA — Versi GitHub Pages + Firebase
+
    Data disimpan di Firebase Realtime Database (gratis) lewat
    REST API biasa (fetch), tanpa perlu install library apa pun.
    Supaya jalan, WAJIB isi FIREBASE_DB_URL di bawah ini dulu.
@@ -399,21 +411,20 @@ let pendingTabAfterPin = null;
 let todayAttendance = {};  // { empId: {masuk, pulang} }
 
 /* ---------------- storage helpers (Firebase REST) ---------------- */
-async function appCheckHeaders(extra){
-  const headers = Object.assign({}, extra||{});
-  if(window.__getAppCheckToken){
-    const token = await window.__getAppCheckToken();
-    if(token) headers['X-Firebase-AppCheck'] = token;
+async function authQuery(){
+  if(window.__getAuthToken){
+    const token = await window.__getAuthToken();
+    if(token) return '?auth=' + encodeURIComponent(token);
   }
-  return headers;
+  return '';
 }
 async function sGet(path){
   // Mengembalikan {ok:true, data} kalau berhasil (data bisa null jika memang kosong),
   // atau {ok:false} kalau GAGAL mengambil (koneksi/izin bermasalah) — supaya
   // pemanggil tidak salah kira "gagal ambil" sebagai "datanya memang kosong".
   try{
-    const headers = await appCheckHeaders();
-    const res = await fetch(`${DB_URL}/${path}.json`, { cache:'no-store', headers });
+    const q = await authQuery();
+    const res = await fetch(`${DB_URL}/${path}.json${q}`, { cache:'no-store' });
     if(!res.ok){ console.error('Gagal mengambil', path, res.status); return { ok:false }; }
     const data = await res.json();
     return { ok:true, data }; // data asli (object/array/string), bisa null kalau memang kosong
@@ -421,10 +432,10 @@ async function sGet(path){
 }
 async function sSet(path, valueObj){
   try{
-    const headers = await appCheckHeaders({ 'Content-Type':'application/json' });
-    const res = await fetch(`${DB_URL}/${path}.json`, {
+    const q = await authQuery();
+    const res = await fetch(`${DB_URL}/${path}.json${q}`, {
       method:'PUT',
-      headers,
+      headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify(valueObj),
     });
     return res.ok;
@@ -822,6 +833,7 @@ document.getElementById('btnPrint').addEventListener('click', ()=>window.print()
     document.getElementById('setupWarning').classList.remove('hidden');
     return; // hentikan, jangan coba konek ke database yang belum diisi
   }
+  if(window.__authReady) await window.__authReady;
   await initData();
   renderEmployeeGrid();
   await loadTodayAttendance();
