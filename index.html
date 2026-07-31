@@ -369,12 +369,15 @@ let todayAttendance = {};  // { empId: {masuk, pulang} }
 
 /* ---------------- storage helpers (Firebase REST) ---------------- */
 async function sGet(path){
+  // Mengembalikan {ok:true, data} kalau berhasil (data bisa null jika memang kosong),
+  // atau {ok:false} kalau GAGAL mengambil (koneksi/izin bermasalah) — supaya
+  // pemanggil tidak salah kira "gagal ambil" sebagai "datanya memang kosong".
   try{
     const res = await fetch(`${DB_URL}/${path}.json`, { cache:'no-store' });
-    if(!res.ok) return null;
+    if(!res.ok){ console.error('Gagal mengambil', path, res.status); return { ok:false }; }
     const data = await res.json();
-    return data; // sudah berupa object/array/string asli, bukan string JSON
-  }catch(e){ console.error('Gagal mengambil', path, e); return null; }
+    return { ok:true, data }; // data asli (object/array/string), bisa null kalau memang kosong
+  }catch(e){ console.error('Gagal mengambil', path, e); return { ok:false }; }
 }
 async function sSet(path, valueObj){
   try{
@@ -408,10 +411,18 @@ function toast(msg, isErr){
 
 /* ---------------- init / seed data ---------------- */
 async function initData(){
-  const empRaw = await sGet('karyawan-list');
-  if(empRaw){
-    employees = empRaw;
+  const empResult = await sGet('karyawan-list');
+  if(!empResult.ok){
+    // GAGAL mengambil data (koneksi/izin Firebase bermasalah) — JANGAN pernah
+    // menimpa data karyawan dengan data contoh. Tampilkan peringatan & coba lagi.
+    employees = [];
+    toast('Gagal memuat data karyawan dari server. Periksa koneksi internet lalu muat ulang halaman.', true);
+  } else if(empResult.data){
+    // Data berhasil diambil dan memang ada isinya.
+    employees = empResult.data;
   } else {
+    // Data berhasil diambil (server merespons OK) dan MEMANG kosong (belum pernah diisi) —
+    // baru di sini aman untuk mengisi data contoh awal.
     employees = [
       { id: crypto.randomUUID(), nama:'Siti Aminah', jabatan:'Apoteker', gajiHarian:120000 },
       { id: crypto.randomUUID(), nama:'Budi Santoso', jabatan:'Asisten Apoteker', gajiHarian:100000 },
@@ -420,9 +431,13 @@ async function initData(){
     await sSet('karyawan-list', employees);
   }
 
-  const pinRaw = await sGet('admin-pin');
-  if(pinRaw){
-    adminPin = pinRaw;
+  const pinResult = await sGet('admin-pin');
+  if(!pinResult.ok){
+    // Gagal mengambil PIN — pakai PIN default untuk sesi ini saja TANPA menimpa
+    // PIN asli yang tersimpan di server.
+    adminPin = '1234';
+  } else if(pinResult.data){
+    adminPin = pinResult.data;
   } else {
     adminPin = '1234';
     await sSet('admin-pin', adminPin);
@@ -442,8 +457,8 @@ function tickClock(){
 
 /* ---------------- tab absen ---------------- */
 async function loadTodayAttendance(){
-  const raw = await sGet('absensi/' + dateKey(new Date()));
-  todayAttendance = raw || {};
+  const result = await sGet('absensi/' + dateKey(new Date()));
+  todayAttendance = (result.ok && result.data) ? result.data : {};
 }
 
 function renderEmployeeGrid(){
@@ -541,9 +556,9 @@ async function buildRekap(startStr, endStr){
   const cur = new Date(start);
   while(cur <= end){
     const ds = dateKey(cur);
-    const raw = await sGet('absensi/' + ds);
-    if(raw){
-      const obj = raw;
+    const result = await sGet('absensi/' + ds);
+    if(result.ok && result.data){
+      const obj = result.data;
       Object.keys(obj).forEach(empId=>{
         if(!agg[empId]) agg[empId] = { hariHadir:0, totalMenit:0 };
         const rec = obj[empId];
