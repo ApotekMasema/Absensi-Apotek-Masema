@@ -342,6 +342,37 @@
   </div>
 </div>
 
+
+<!-- ========= Firebase App Check (keamanan database) ========= -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCVOVYv8fY6RUfaWBoOENDSE4gjUkaRzhg",
+    authDomain: "absensi-apotek-masema.firebaseapp.com",
+    databaseURL: "https://absensi-apotek-masema-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "absensi-apotek-masema",
+    storageBucket: "absensi-apotek-masema.firebasestorage.app",
+    messagingSenderId: "790157921111",
+    appId: "1:790157921111:web:f220b7aff605cd5f854c12"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const appCheck = firebase.appCheck();
+  appCheck.activate("6LfiAW4tAAAAAGdkvjPTwZM0yBPwGUwaFmYfuyD1", true);
+
+  // Dipakai oleh sGet/sSet supaya tiap request ke database menyertakan
+  // bukti bahwa permintaan datang dari aplikasi asli ini (App Check).
+  window.__getAppCheckToken = async function(){
+    try{
+      const result = await appCheck.getToken(false);
+      return result.token;
+    }catch(e){
+      console.error('Gagal mengambil App Check token', e);
+      return null;
+    }
+  };
+</script>
+
 <script>
 /* =========================================================
    ABSENSI APOTEK MASEMA MEDIKA — Versi GitHub Pages + Firebase
@@ -368,12 +399,21 @@ let pendingTabAfterPin = null;
 let todayAttendance = {};  // { empId: {masuk, pulang} }
 
 /* ---------------- storage helpers (Firebase REST) ---------------- */
+async function appCheckHeaders(extra){
+  const headers = Object.assign({}, extra||{});
+  if(window.__getAppCheckToken){
+    const token = await window.__getAppCheckToken();
+    if(token) headers['X-Firebase-AppCheck'] = token;
+  }
+  return headers;
+}
 async function sGet(path){
   // Mengembalikan {ok:true, data} kalau berhasil (data bisa null jika memang kosong),
   // atau {ok:false} kalau GAGAL mengambil (koneksi/izin bermasalah) — supaya
   // pemanggil tidak salah kira "gagal ambil" sebagai "datanya memang kosong".
   try{
-    const res = await fetch(`${DB_URL}/${path}.json`, { cache:'no-store' });
+    const headers = await appCheckHeaders();
+    const res = await fetch(`${DB_URL}/${path}.json`, { cache:'no-store', headers });
     if(!res.ok){ console.error('Gagal mengambil', path, res.status); return { ok:false }; }
     const data = await res.json();
     return { ok:true, data }; // data asli (object/array/string), bisa null kalau memang kosong
@@ -381,9 +421,10 @@ async function sGet(path){
 }
 async function sSet(path, valueObj){
   try{
+    const headers = await appCheckHeaders({ 'Content-Type':'application/json' });
     const res = await fetch(`${DB_URL}/${path}.json`, {
       method:'PUT',
-      headers:{ 'Content-Type':'application/json' },
+      headers,
       body: JSON.stringify(valueObj),
     });
     return res.ok;
