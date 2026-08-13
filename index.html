@@ -122,9 +122,14 @@
   .rekap-controls{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
   .field{display:flex;flex-direction:column;gap:4px;}
   .field label{font-size:11.5px;font-weight:700;color:var(--ink-soft);}
-  input[type=month],input[type=date],input[type=text],input[type=number],input[type=password]{
+  input[type=month],input[type=date],input[type=text],input[type=number],input[type=password],select{
     border:1px solid var(--border);border-radius:9px;padding:9px 11px;font-size:13.5px;background:var(--surface);color:var(--ink);
   }
+  .emp-shift-select{width:100%;margin-bottom:2px;}
+  .emp-shift-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--ink-soft);background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:3px 9px;width:fit-content;}
+  .emp-wage-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .emp-wage-row .field label{font-size:10.5px;}
+  .emp-wage-row input{width:100px;}
   .btn{
     border:none;border-radius:9px;padding:10px 15px;font-weight:700;font-size:13px;
     background:var(--surface);border:1px solid var(--border);color:var(--ink);
@@ -258,16 +263,17 @@
         <tr>
           <th>Nama</th>
           <th>Jabatan</th>
-          <th class="num">Hari Hadir</th>
+          <th class="num">Sift Pagi</th>
+          <th class="num">Sift Siang</th>
+          <th class="num">Full Day</th>
           <th class="num">Jam Kerja</th>
-          <th class="num">Gaji / Hari</th>
           <th class="num">Total Gaji</th>
         </tr>
       </thead>
       <tbody id="rekapBody"></tbody>
       <tfoot>
         <tr>
-          <td colspan="5">Total Gaji Dibayarkan</td>
+          <td colspan="6">Total Gaji Dibayarkan</td>
           <td class="num" id="rekapGrandTotal">Rp 0</td>
         </tr>
       </tfoot>
@@ -277,7 +283,7 @@
   <!-- ===== TAB PENGATURAN ===== -->
   <section class="tab-panel" id="tab-pengaturan">
     <h2>Kelola Karyawan</h2>
-    <p class="section-hint">Atur nama, jabatan, dan gaji harian tiap karyawan.</p>
+    <p class="section-hint">Atur nama, jabatan, dan tarif gaji tiap karyawan untuk masing-masing sift (Pagi / Siang / Full Day).</p>
 
     <div class="card">
       <div id="employeeSettingsList"></div>
@@ -291,8 +297,16 @@
           <input type="text" id="newEmpRole" placeholder="Apoteker / Kasir / dll">
         </div>
         <div class="field">
-          <label>Gaji / hari (Rp)</label>
-          <input type="number" id="newEmpWage" placeholder="100000" min="0" required>
+          <label>Gaji Sift Pagi (Rp)</label>
+          <input type="number" id="newEmpWagePagi" placeholder="60000" min="0" required>
+        </div>
+        <div class="field">
+          <label>Gaji Sift Siang (Rp)</label>
+          <input type="number" id="newEmpWageSiang" placeholder="60000" min="0" required>
+        </div>
+        <div class="field">
+          <label>Gaji Full Day (Rp)</label>
+          <input type="number" id="newEmpWageFullDay" placeholder="110000" min="0" required>
         </div>
         <button type="submit" class="btn btn-primary">+ Tambah Karyawan</button>
       </form>
@@ -404,7 +418,14 @@ const DB_CONFIGURED = DB_URL && !DB_URL.includes('TEMPEL_');
 const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
 const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 
-let employees = [];        // [{id, nama, jabatan, gajiHarian}]
+const SHIFTS = {
+  pagi:    { label: 'Pagi (08:00–14:00)',     short: 'Pagi',     wageKey: 'gajiPagi' },
+  siang:   { label: 'Siang (14:00–20:00)',    short: 'Siang',    wageKey: 'gajiSiang' },
+  fullday: { label: 'Full Day (08:00–20:00)', short: 'Full Day', wageKey: 'gajiFullDay' },
+};
+const SHIFT_KEYS = Object.keys(SHIFTS);
+
+let employees = [];        // [{id, nama, jabatan, gajiPagi, gajiSiang, gajiFullDay}]
 let adminPin = '1234';
 let pinUnlocked = false;
 let pendingTabAfterPin = null;
@@ -472,13 +493,27 @@ async function initData(){
   } else if(empResult.data){
     // Data berhasil diambil dan memang ada isinya.
     employees = empResult.data;
+    // Migrasi: karyawan lama masih pakai gajiHarian tunggal — ubah jadi 3 tarif sift
+    // (nilainya disamakan dulu ke gajiHarian lama, admin bisa sesuaikan di Pengaturan).
+    let migrated = false;
+    employees.forEach(emp=>{
+      if(emp.gajiPagi === undefined || emp.gajiSiang === undefined || emp.gajiFullDay === undefined){
+        const base = emp.gajiHarian || 0;
+        emp.gajiPagi = emp.gajiPagi ?? base;
+        emp.gajiSiang = emp.gajiSiang ?? base;
+        emp.gajiFullDay = emp.gajiFullDay ?? base;
+        delete emp.gajiHarian;
+        migrated = true;
+      }
+    });
+    if(migrated) await sSet('karyawan-list', employees);
   } else {
     // Data berhasil diambil (server merespons OK) dan MEMANG kosong (belum pernah diisi) —
     // baru di sini aman untuk mengisi data contoh awal.
     employees = [
-      { id: crypto.randomUUID(), nama:'Siti Aminah', jabatan:'Apoteker', gajiHarian:120000 },
-      { id: crypto.randomUUID(), nama:'Budi Santoso', jabatan:'Asisten Apoteker', gajiHarian:100000 },
-      { id: crypto.randomUUID(), nama:'Dewi Lestari', jabatan:'Kasir', gajiHarian:90000 },
+      { id: crypto.randomUUID(), nama:'Siti Aminah', jabatan:'Apoteker', gajiPagi:70000, gajiSiang:70000, gajiFullDay:130000 },
+      { id: crypto.randomUUID(), nama:'Budi Santoso', jabatan:'Asisten Apoteker', gajiPagi:60000, gajiSiang:60000, gajiFullDay:110000 },
+      { id: crypto.randomUUID(), nama:'Dewi Lestari', jabatan:'Kasir', gajiPagi:55000, gajiSiang:55000, gajiFullDay:100000 },
     ];
     await sSet('karyawan-list', employees);
   }
@@ -528,10 +563,17 @@ function renderEmployeeGrid(){
     const pulang = rec && rec.pulang;
     if(masuk) sudahAbsen++;
 
+    const siftKey = masuk ? ((rec.sift && SHIFTS[rec.sift]) ? rec.sift : 'fullday') : null;
+    const siftInfo = siftKey ? SHIFTS[siftKey] : null;
+
     let statusHtml, btnHtml;
     if(!masuk){
       statusHtml = `<span class="emp-status st-belum">Belum absen</span>`;
-      btnHtml = `<button class="emp-btn" data-action="masuk" data-id="${emp.id}">Absen Masuk</button>`;
+      btnHtml = `
+        <select class="emp-shift-select" id="shift-${emp.id}">
+          ${SHIFT_KEYS.map(k=>`<option value="${k}">${SHIFTS[k].label}</option>`).join('')}
+        </select>
+        <button class="emp-btn" data-action="masuk" data-id="${emp.id}">Absen Masuk</button>`;
     } else if(masuk && !pulang){
       statusHtml = `<span class="emp-status st-masuk">Sudah masuk</span>`;
       btnHtml = `<button class="emp-btn pulang" data-action="pulang" data-id="${emp.id}">Absen Pulang</button>`;
@@ -547,6 +589,7 @@ function renderEmployeeGrid(){
           ${emp.jabatan ? `<div class="emp-role">${escapeHtml(emp.jabatan)}</div>` : ''}
         </div>
         ${statusHtml}
+        ${siftInfo ? `<span class="emp-shift-badge">🕒 Sift ${siftInfo.short}</span>` : ''}
         <div class="emp-times">
           <span>Masuk: <b>${masuk ? masuk.slice(0,5) : '-'}</b></span>
           <span>Pulang: <b>${pulang ? pulang.slice(0,5) : '-'}</b></span>
@@ -575,7 +618,10 @@ async function onAbsenClick(e){
 
   if(action === 'masuk'){
     if(rec.masuk){ toast('Sudah absen masuk sebelumnya.'); renderEmployeeGrid(); return; }
+    const shiftSelect = document.getElementById('shift-' + id);
+    const siftVal = shiftSelect ? shiftSelect.value : SHIFT_KEYS[0];
     rec.masuk = timeStr(now);
+    rec.sift = siftVal;
   } else {
     if(!rec.masuk){ toast('Belum absen masuk.'); renderEmployeeGrid(); return; }
     if(rec.pulang){ toast('Sudah absen pulang sebelumnya.'); renderEmployeeGrid(); return; }
@@ -586,7 +632,8 @@ async function onAbsenClick(e){
   const ok = await sSet('absensi/' + dateKey(now), todayAttendance);
   const emp = employees.find(x=>x.id===id);
   if(ok){
-    toast(`${emp ? emp.nama : 'Absen'} — ${action === 'masuk' ? 'absen masuk' : 'absen pulang'} pukul ${timeStr(now).slice(0,5)} ✓`);
+    const siftLabel = action === 'masuk' && rec.sift ? ` (Sift ${SHIFTS[rec.sift].short})` : '';
+    toast(`${emp ? emp.nama : 'Absen'} — ${action === 'masuk' ? 'absen masuk' : 'absen pulang'} pukul ${timeStr(now).slice(0,5)}${siftLabel} ✓`);
   } else {
     toast('Gagal menyimpan absen, coba lagi.', true);
   }
@@ -602,8 +649,12 @@ async function buildRekap(startStr, endStr){
   const start = parseDateInput(startStr);
   const end = parseDateInput(endStr);
 
-  const agg = {}; // id -> {hariHadir, totalMenit}
-  employees.forEach(e=> agg[e.id] = { hariHadir:0, totalMenit:0 });
+  const agg = {}; // id -> {hariHadir, totalMenit, gaji, perSift:{pagi,siang,fullday}}
+  function blankAgg(){
+    const perSift = {}; SHIFT_KEYS.forEach(k=> perSift[k] = 0);
+    return { hariHadir:0, totalMenit:0, gaji:0, perSift };
+  }
+  employees.forEach(e=> agg[e.id] = blankAgg());
 
   const cur = new Date(start);
   while(cur <= end){
@@ -612,10 +663,16 @@ async function buildRekap(startStr, endStr){
     if(result.ok && result.data){
       const obj = result.data;
       Object.keys(obj).forEach(empId=>{
-        if(!agg[empId]) agg[empId] = { hariHadir:0, totalMenit:0 };
+        if(!agg[empId]) agg[empId] = blankAgg();
         const rec = obj[empId];
         if(rec.masuk){
           agg[empId].hariHadir += 1;
+          const emp = employees.find(e=>e.id===empId);
+          // Data absen lama (sebelum fitur sift) tidak punya field sift —
+          // anggap sebagai Full Day supaya tetap terhitung gajinya.
+          const siftKey = (rec.sift && SHIFTS[rec.sift]) ? rec.sift : 'fullday';
+          agg[empId].perSift[siftKey] += 1;
+          if(emp) agg[empId].gaji += Number(emp[SHIFTS[siftKey].wageKey]) || 0;
           if(rec.pulang){
             const t1 = new Date(`${ds}T${rec.masuk}`);
             const t2 = new Date(`${ds}T${rec.pulang}`);
@@ -639,27 +696,27 @@ async function renderRekap(){
     return;
   }
 
-  document.getElementById('rekapBody').innerHTML = `<tr><td colspan="6" class="muted">Menghitung rekap…</td></tr>`;
+  document.getElementById('rekapBody').innerHTML = `<tr><td colspan="7" class="muted">Menghitung rekap…</td></tr>`;
   const agg = await buildRekap(startVal, endVal);
 
   let totalGaji = 0, totalHari = 0, totalJam = 0;
   const rows = employees.map(emp=>{
-    const a = agg[emp.id] || { hariHadir:0, totalMenit:0 };
+    const a = agg[emp.id] || { hariHadir:0, totalMenit:0, gaji:0, perSift:{pagi:0,siang:0,fullday:0} };
     const jam = a.totalMenit/60;
-    const gaji = a.hariHadir * (emp.gajiHarian||0);
-    totalGaji += gaji; totalHari += a.hariHadir; totalJam += jam;
-    return { emp, hariHadir:a.hariHadir, jam, gaji };
+    totalGaji += a.gaji; totalHari += a.hariHadir; totalJam += jam;
+    return { emp, hariHadir:a.hariHadir, jam, gaji:a.gaji, perSift:a.perSift };
   });
 
   document.getElementById('rekapBody').innerHTML = rows.length ? rows.map(r=>`
     <tr>
       <td>${escapeHtml(r.emp.nama)}</td>
       <td>${escapeHtml(r.emp.jabatan||'-')}</td>
-      <td class="num">${r.hariHadir} hari</td>
+      <td class="num">${r.perSift.pagi} hari</td>
+      <td class="num">${r.perSift.siang} hari</td>
+      <td class="num">${r.perSift.fullday} hari</td>
       <td class="num">${r.jam.toFixed(1)} jam</td>
-      <td class="num">${rupiah(r.emp.gajiHarian)}</td>
       <td class="num">${rupiah(r.gaji)}</td>
-    </tr>`).join('') : `<tr><td colspan="6" class="muted">Belum ada karyawan.</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="7" class="muted">Belum ada karyawan.</td></tr>`;
 
   document.getElementById('rekapGrandTotal').textContent = rupiah(totalGaji);
 
@@ -677,9 +734,9 @@ async function renderRekap(){
 function exportCsv(){
   const rows = renderRekap._rows || [];
   if(!rows.length){ toast('Tidak ada data untuk diunduh.', true); return; }
-  let csv = 'Nama,Jabatan,Hari Hadir,Jam Kerja,Gaji per Hari,Total Gaji\n';
+  let csv = 'Nama,Jabatan,Sift Pagi (hari),Sift Siang (hari),Full Day (hari),Jam Kerja,Total Gaji\n';
   rows.forEach(r=>{
-    csv += `"${r.emp.nama}","${r.emp.jabatan||''}",${r.hariHadir},${r.jam.toFixed(2)},${r.emp.gajiHarian},${Math.round(r.gaji)}\n`;
+    csv += `"${r.emp.nama}","${r.emp.jabatan||''}",${r.perSift.pagi},${r.perSift.siang},${r.perSift.fullday},${r.jam.toFixed(2)},${Math.round(r.gaji)}\n`;
   });
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
@@ -699,7 +756,11 @@ function renderEmployeeSettings(){
     <div class="emp-row" data-id="${emp.id}">
       <div class="nm">${escapeHtml(emp.nama)}</div>
       <input type="text" class="edit-role" value="${escapeHtml(emp.jabatan||'')}" placeholder="Jabatan">
-      <input type="number" class="edit-wage" value="${emp.gajiHarian}" min="0">
+      <div class="emp-wage-row">
+        <div class="field"><label>Pagi</label><input type="number" class="edit-wage-pagi" value="${emp.gajiPagi||0}" min="0"></div>
+        <div class="field"><label>Siang</label><input type="number" class="edit-wage-siang" value="${emp.gajiSiang||0}" min="0"></div>
+        <div class="field"><label>Full Day</label><input type="number" class="edit-wage-fullday" value="${emp.gajiFullDay||0}" min="0"></div>
+      </div>
       <button class="btn save-emp">Simpan</button>
       <button class="btn btn-danger del-emp">Hapus</button>
     </div>
@@ -711,7 +772,9 @@ function renderEmployeeSettings(){
       const id = row.dataset.id;
       const emp = employees.find(x=>x.id===id);
       emp.jabatan = row.querySelector('.edit-role').value.trim();
-      emp.gajiHarian = Number(row.querySelector('.edit-wage').value) || 0;
+      emp.gajiPagi = Number(row.querySelector('.edit-wage-pagi').value) || 0;
+      emp.gajiSiang = Number(row.querySelector('.edit-wage-siang').value) || 0;
+      emp.gajiFullDay = Number(row.querySelector('.edit-wage-fullday').value) || 0;
       await saveEmployees();
       toast('Data karyawan disimpan ✓');
     });
@@ -735,9 +798,11 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async (e)=
   e.preventDefault();
   const nama = document.getElementById('newEmpName').value.trim();
   const jabatan = document.getElementById('newEmpRole').value.trim();
-  const gaji = Number(document.getElementById('newEmpWage').value) || 0;
+  const gajiPagi = Number(document.getElementById('newEmpWagePagi').value) || 0;
+  const gajiSiang = Number(document.getElementById('newEmpWageSiang').value) || 0;
+  const gajiFullDay = Number(document.getElementById('newEmpWageFullDay').value) || 0;
   if(!nama) return;
-  employees.push({ id: crypto.randomUUID(), nama, jabatan, gajiHarian: gaji });
+  employees.push({ id: crypto.randomUUID(), nama, jabatan, gajiPagi, gajiSiang, gajiFullDay });
   await saveEmployees();
   e.target.reset();
   renderEmployeeSettings();
