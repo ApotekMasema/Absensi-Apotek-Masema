@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#FAF9F5;
@@ -253,6 +254,7 @@
       </div>
       <button class="btn" id="btnThisMonth">Bulan Ini</button>
       <button class="btn" id="btnPrint">🖨️ Cetak</button>
+      <button class="btn btn-primary" id="btnExcel">📊 Unduh Excel</button>
       <button class="btn" id="btnCsv">⬇️ Unduh CSV</button>
     </div>
 
@@ -644,10 +646,13 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+let lastDetailRows = []; // detail absen harian dari rekap terakhir yang dihitung, untuk export Excel
+
 /* ---------------- tab rekap ---------------- */
 async function buildRekap(startStr, endStr){
   const start = parseDateInput(startStr);
   const end = parseDateInput(endStr);
+  lastDetailRows = [];
 
   const agg = {}; // id -> {hariHadir, totalMenit, gaji, perSift:{pagi,siang,fullday}}
   function blankAgg(){
@@ -668,17 +673,26 @@ async function buildRekap(startStr, endStr){
         if(rec.masuk){
           agg[empId].hariHadir += 1;
           const emp = employees.find(e=>e.id===empId);
-          // Data absen lama (sebelum fitur sift) tidak punya field sift —
-          // anggap sebagai Full Day supaya tetap terhitung gajinya.
           const siftKey = (rec.sift && SHIFTS[rec.sift]) ? rec.sift : 'fullday';
           agg[empId].perSift[siftKey] += 1;
           if(emp) agg[empId].gaji += Number(emp[SHIFTS[siftKey].wageKey]) || 0;
+          let jamKerja = 0;
           if(rec.pulang){
             const t1 = new Date(`${ds}T${rec.masuk}`);
             const t2 = new Date(`${ds}T${rec.pulang}`);
             const diff = (t2 - t1) / 60000;
-            if(diff > 0) agg[empId].totalMenit += diff;
+            if(diff > 0){ jamKerja = diff/60; agg[empId].totalMenit += diff; }
           }
+          lastDetailRows.push({
+            tanggal: ds,
+            nama: emp ? emp.nama : '(karyawan dihapus)',
+            jabatan: emp ? (emp.jabatan||'') : '',
+            sift: SHIFTS[siftKey].short,
+            masuk: rec.masuk.slice(0,5),
+            pulang: rec.pulang ? rec.pulang.slice(0,5) : '-',
+            jamKerja,
+            gaji: emp ? (Number(emp[SHIFTS[siftKey].wageKey]) || 0) : 0,
+          });
         }
       });
     }
@@ -743,6 +757,40 @@ function exportCsv(){
   a.href = URL.createObjectURL(blob);
   a.download = `Rekap-Gaji-${renderRekap._range || 'periode'}.csv`;
   a.click();
+}
+
+function exportExcel(){
+  const rows = renderRekap._rows || [];
+  if(!rows.length){ toast('Tidak ada data untuk diunduh.', true); return; }
+  if(typeof XLSX === 'undefined'){ toast('Gagal memuat pustaka Excel. Periksa koneksi internet.', true); return; }
+
+  // Sheet 1: Rekap Gaji (ringkasan per karyawan)
+  const summaryAoa = [
+    ['Nama','Jabatan','Sift Pagi (hari)','Sift Siang (hari)','Full Day (hari)','Jam Kerja','Total Gaji']
+  ];
+  let grandTotal = 0;
+  rows.forEach(r=>{
+    grandTotal += r.gaji;
+    summaryAoa.push([r.emp.nama, r.emp.jabatan||'', r.perSift.pagi, r.perSift.siang, r.perSift.fullday, Number(r.jam.toFixed(2)), Math.round(r.gaji)]);
+  });
+  summaryAoa.push(['','','','','','Total Gaji Dibayarkan', Math.round(grandTotal)]);
+
+  // Sheet 2: Detail Absensi (log harian)
+  const detailAoa = [
+    ['Tanggal','Nama','Jabatan','Sift','Jam Masuk','Jam Pulang','Jam Kerja','Gaji Hari Itu']
+  ];
+  (lastDetailRows||[]).forEach(d=>{
+    detailAoa.push([d.tanggal, d.nama, d.jabatan, d.sift, d.masuk, d.pulang, Number(d.jamKerja.toFixed(2)), Math.round(d.gaji)]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+  wsSummary['!cols'] = [{wch:22},{wch:18},{wch:14},{wch:14},{wch:12},{wch:11},{wch:14}];
+  const wsDetail = XLSX.utils.aoa_to_sheet(detailAoa);
+  wsDetail['!cols'] = [{wch:12},{wch:22},{wch:18},{wch:10},{wch:10},{wch:10},{wch:10},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Rekap Gaji');
+  XLSX.utils.book_append_sheet(wb, wsDetail, 'Detail Absensi');
+  XLSX.writeFile(wb, `Rekap-Absensi-Gaji-${renderRekap._range || 'periode'}.xlsx`);
 }
 
 /* ---------------- tab pengaturan ---------------- */
@@ -890,6 +938,7 @@ document.getElementById('btnThisMonth').addEventListener('click', ()=>{
   renderRekap();
 });
 document.getElementById('btnCsv').addEventListener('click', exportCsv);
+document.getElementById('btnExcel').addEventListener('click', exportExcel);
 document.getElementById('btnPrint').addEventListener('click', ()=>window.print());
 
 /* ---------------- boot ---------------- */
