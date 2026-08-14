@@ -115,6 +115,11 @@
   .emp-btn.pulang{background:var(--accent);}
   .emp-btn.pulang:hover{background:#a2620a;}
   .emp-btn:disabled{background:var(--bg);color:var(--ink-faint);border:1px solid var(--border);cursor:default;}
+  .emp-btn-edit{
+    border:none;border-radius:10px;padding:9px;font-weight:600;font-size:12px;
+    background:transparent;color:var(--ink-soft);border:1px solid var(--border);transition:.15s;margin-top:4px;
+  }
+  .emp-btn-edit:hover{background:var(--bg);color:var(--ink);}
   .empty-state{
     border:1px dashed var(--border);border-radius:var(--radius);padding:34px;text-align:center;color:var(--ink-soft);
   }
@@ -341,6 +346,28 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="editAbsenModal">
+  <div class="modal" style="max-width:340px;">
+    <h3>Perbaiki Absen Hari Ini</h3>
+    <p id="editAbsenNama" style="font-weight:600;color:var(--ink);"></p>
+    <div style="text-align:left;margin-bottom:12px;">
+      <label style="font-size:12.5px;color:var(--ink-soft);display:block;margin-bottom:4px;">Sift</label>
+      <select id="editAbsenSift" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line,#ddd);"></select>
+    </div>
+    <div style="text-align:left;margin-bottom:12px;">
+      <label style="font-size:12.5px;color:var(--ink-soft);display:block;margin-bottom:4px;">Jam Masuk</label>
+      <input type="time" id="editAbsenJamMasuk" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line,#ddd);">
+    </div>
+    <div style="text-align:left;margin-bottom:12px;" id="editAbsenJamPulangWrap">
+      <label style="font-size:12.5px;color:var(--ink-soft);display:block;margin-bottom:4px;">Jam Pulang</label>
+      <input type="time" id="editAbsenJamPulang" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line,#ddd);">
+    </div>
+    <button class="btn btn-primary" id="editAbsenSimpan" style="width:100%;padding:11px;">Simpan Perbaikan</button>
+    <br>
+    <button class="cancel" id="editAbsenBatal">Batal</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <div class="modal-overlay hidden" id="setupWarning">
@@ -431,6 +458,7 @@ let employees = [];        // [{id, nama, jabatan, gajiPagi, gajiSiang, gajiFull
 let adminPin = '1234';
 let pinUnlocked = false;
 let pendingTabAfterPin = null;
+let pinCallback = null;
 let todayAttendance = {};  // { empId: {masuk, pulang} }
 
 /* ---------------- storage helpers (Firebase REST) ---------------- */
@@ -578,10 +606,12 @@ function renderEmployeeGrid(){
         <button class="emp-btn" data-action="masuk" data-id="${emp.id}">Absen Masuk</button>`;
     } else if(masuk && !pulang){
       statusHtml = `<span class="emp-status st-masuk">Sudah masuk</span>`;
-      btnHtml = `<button class="emp-btn pulang" data-action="pulang" data-id="${emp.id}">Absen Pulang</button>`;
+      btnHtml = `<button class="emp-btn pulang" data-action="pulang" data-id="${emp.id}">Absen Pulang</button>
+        <button class="emp-btn-edit" data-action="edit" data-id="${emp.id}">✏️ Ubah Sift/Jam</button>`;
     } else {
       statusHtml = `<span class="emp-status st-selesai">✓ Absen lengkap</span>`;
-      btnHtml = `<button class="emp-btn" disabled>Selesai hari ini</button>`;
+      btnHtml = `<button class="emp-btn" disabled>Selesai hari ini</button>
+        <button class="emp-btn-edit" data-action="edit" data-id="${emp.id}">✏️ Ubah Sift/Jam</button>`;
     }
 
     return `
@@ -605,7 +635,71 @@ function renderEmployeeGrid(){
   grid.querySelectorAll('.emp-btn[data-action]').forEach(btn=>{
     btn.addEventListener('click', onAbsenClick);
   });
+  grid.querySelectorAll('.emp-btn-edit[data-action="edit"]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.id;
+      pinCallback = ()=>openEditAbsenModal(id);
+      openPinModal();
+    });
+  });
 }
+
+/* ---------------- perbaiki absen (sift/jam salah klik) ---------------- */
+let editAbsenEmpId = null;
+function openEditAbsenModal(empId){
+  const emp = employees.find(x=>x.id===empId);
+  const rec = todayAttendance[empId];
+  if(!emp || !rec || !rec.masuk){ toast('Data absen tidak ditemukan.', true); return; }
+  editAbsenEmpId = empId;
+  document.getElementById('editAbsenNama').textContent = emp.nama;
+  const siftSelect = document.getElementById('editAbsenSift');
+  siftSelect.innerHTML = SHIFT_KEYS.map(k=>`<option value="${k}">${SHIFTS[k].label}</option>`).join('');
+  siftSelect.value = (rec.sift && SHIFTS[rec.sift]) ? rec.sift : 'fullday';
+  document.getElementById('editAbsenJamMasuk').value = rec.masuk ? rec.masuk.slice(0,5) : '';
+  const pulangWrap = document.getElementById('editAbsenJamPulangWrap');
+  if(rec.pulang){
+    pulangWrap.style.display = '';
+    document.getElementById('editAbsenJamPulang').value = rec.pulang.slice(0,5);
+  } else {
+    pulangWrap.style.display = 'none';
+  }
+  document.getElementById('editAbsenModal').classList.remove('hidden');
+}
+function closeEditAbsenModal(){
+  document.getElementById('editAbsenModal').classList.add('hidden');
+  editAbsenEmpId = null;
+}
+document.getElementById('editAbsenBatal').addEventListener('click', closeEditAbsenModal);
+document.getElementById('editAbsenSimpan').addEventListener('click', async ()=>{
+  if(!editAbsenEmpId) return;
+  const siftBaru = document.getElementById('editAbsenSift').value;
+  const jamMasukBaru = document.getElementById('editAbsenJamMasuk').value;
+  const jamPulangBaru = document.getElementById('editAbsenJamPulang').value;
+  if(!jamMasukBaru){ toast('Jam masuk tidak boleh kosong.', true); return; }
+
+  // Muat ulang data terbaru dulu (jaga-jaga ada perubahan dari perangkat lain sejak modal dibuka)
+  await loadTodayAttendance();
+  const rec = todayAttendance[editAbsenEmpId];
+  if(!rec || !rec.masuk){ toast('Data absen sudah tidak ada (mungkin dihapus dari perangkat lain).', true); closeEditAbsenModal(); renderEmployeeGrid(); return; }
+
+  rec.sift = siftBaru;
+  rec.masuk = jamMasukBaru.length===5 ? jamMasukBaru+':00' : jamMasukBaru;
+  if(rec.pulang){
+    if(!jamPulangBaru){ toast('Jam pulang tidak boleh kosong.', true); return; }
+    if(jamPulangBaru <= jamMasukBaru){ toast('Jam pulang harus setelah jam masuk.', true); return; }
+    rec.pulang = jamPulangBaru.length===5 ? jamPulangBaru+':00' : jamPulangBaru;
+  }
+  todayAttendance[editAbsenEmpId] = rec;
+
+  const ok = await sSet('absensi/' + dateKey(new Date()), todayAttendance);
+  if(ok){
+    toast('Absen berhasil diperbaiki ✓');
+    closeEditAbsenModal();
+  } else {
+    toast('Gagal menyimpan perbaikan, coba lagi.', true);
+  }
+  renderEmployeeGrid();
+});
 
 async function onAbsenClick(e){
   const btn = e.currentTarget;
@@ -875,6 +969,7 @@ document.querySelectorAll('.tab').forEach(tabBtn=>{
   tabBtn.addEventListener('click', ()=>{
     const target = tabBtn.dataset.tab;
     if(PROTECTED_TABS.includes(target) && !pinUnlocked){
+      pinCallback = null;
       pendingTabAfterPin = target;
       openPinModal();
       return;
@@ -919,9 +1014,15 @@ document.getElementById('pinInput').addEventListener('keydown', (e)=>{ if(e.key=
 function checkPin(){
   const val = document.getElementById('pinInput').value.trim();
   if(val === adminPin){
-    pinUnlocked = true;
     closePinModal();
-    activateTab(pendingTabAfterPin);
+    if(pinCallback){
+      const cb = pinCallback;
+      pinCallback = null;
+      cb();
+    } else {
+      pinUnlocked = true;
+      activateTab(pendingTabAfterPin);
+    }
   } else {
     toast('PIN salah.', true);
   }
